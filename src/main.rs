@@ -5,7 +5,7 @@ use aws_config::{
     BehaviorVersion
 };
 // use aws_credential_types::provider::{ProvideCredentials, SharedCredentialsProvider};
-
+use aws_sdk_ec2::types::{Instance, Reservation};
 
 #[derive(Debug)]
 struct InstanceInfo {
@@ -50,38 +50,27 @@ async fn list_instances(client: &aws_sdk_ec2::Client) {
         });
 
     let reservations = resp.reservations
-        .unwrap_or_else(|| {
-            panic!("Error listing instances");
-        });
+        .unwrap_or(Vec::<Reservation>::new());
 
-    let instances = reservations.iter().map(|reservation| {
-        // reservation.instances.as_ref().unwrap().iter().for_each(|instance| {
-        //     println!("Instance ID: {:?}", instance.instance_id.as_ref().unwrap());
-        // });
-        let is: Vec<InstanceInfo> = reservation.instances
-            .as_ref()
-            .unwrap_or_else(|| {
-                panic!("Error listing instances");
-            })
-            .iter().map(|instance| {
-                let id = instance.instance_id.as_ref().unwrap();
-                let it = instance.instance_type.as_ref().unwrap();
-                let instance_type = it.as_str().to_string();
+    // Vec<Reservation> から Vec<Instance> に変換したい
+    // Reservation は .instances で Option<Vec<Instance>> を持っている
+    let instances = reservations.into_iter()
+        .map(|reservation| reservation.instances.unwrap_or(Vec::<Instance>::new()))
+        .flatten()
+        .collect::<Vec<Instance>>();
 
-                InstanceInfo {
-                    instance_id: id.to_string(),
-                    instance_type: instance_type.to_string(),
-                }
-            })
-            .collect();
-        is
+    let result = instances.into_iter()
+        .map(|instance| InstanceInfo {
+            instance_id: instance.instance_id.unwrap_or(String::from("")),
+            instance_type: match instance.instance_type {
+                Some(it) => String::from(it.as_str()),
+                None => String::from(""),
+            },
+        })
+        .collect::<Vec<InstanceInfo>>();
+
+    // println!("{:#?}", result);
+    result.iter().for_each(|i| {
+        println!("instance_id: {}, instance_type: {}", i.instance_id, i.instance_type);
     });
-
-    instances.into_iter().for_each(|instance| {
-        instance.iter().for_each(|i| {
-            println!("Instance: Id={:?} Type={:?}", i.instance_id, i.instance_type);
-        });
-    });
-
-    // println!("{:#?}", resp);
 }
